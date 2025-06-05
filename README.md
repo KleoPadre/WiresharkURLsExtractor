@@ -104,7 +104,7 @@ pip install pyshark
 5. Нужно выбрать флешку как местос сохрарения в поле **Место хранения**, так как файл может быть намного больше 100мб
 6. Нажмите **Сохранить**
 
-<img width="502" alt="image" src="https://github.com/user-attachments/assets/b66b4270-cd07-4059-aae7-159bbb46e7bb" />
+<img width="497" alt="image" src="https://github.com/user-attachments/assets/64ebeda6-4d9b-4e5c-8f2c-395e5439696e" />
 
 
 7. Нажмите кнопку **Запустить**
