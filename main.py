@@ -1,254 +1,148 @@
 #!/usr/bin/env python3
 """
-Скрипт для извлечения HTTPS доменов из PCAPNG файла
-Требует установки: pip install pyshark
+Скрипт для извлечения HTTPS-доменов из всех PCAPNG файлов в папке 'capture'.
+Результат сохраняется в папку 'results' с датой и временем в названии.
 """
 
 import pyshark
 import re
-import sys
 import os
 from urllib.parse import urlparse
-from collections import OrderedDict
+from datetime import datetime
 
 def is_ip_address(hostname):
-    """
-    Проверяет, является ли строка IP-адресом
-    
-    Args:
-        hostname (str): Строка для проверки
-    
-    Returns:
-        bool: True если это IP-адрес
-    """
-    # Простая проверка на IPv4
     ipv4_pattern = r'^(\d{1,3}\.){3}\d{1,3}$'
-    # Простая проверка на IPv6
     ipv6_pattern = r'^([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$'
-    
     return bool(re.match(ipv4_pattern, hostname)) or bool(re.match(ipv6_pattern, hostname))
 
 def extract_domain_from_url(url):
-    """
-    Извлекает только доменное имя из URL
-    
-    Args:
-        url (str): Полный URL
-    
-    Returns:
-        str or None: Доменное имя без пути, или None если не подходит
-    """
     try:
         parsed = urlparse(url)
-        
-        # Проверяем, что это HTTPS
-        if parsed.scheme != 'https':
-            return None
-        
-        hostname = parsed.netloc
-        
-        # Убираем порт если есть
-        if ':' in hostname:
-            hostname = hostname.split(':')[0]
-        
-        # Проверяем, что это не IP-адрес
-        if is_ip_address(hostname):
-            return None
-        
-        # Проверяем, что это не локальный адрес
-        if any(hostname.startswith(local) for local in 
-              ['127.', '192.168.', '10.', '172.16.', '172.17.', '172.18.', 
-               '172.19.', '172.20.', '172.21.', '172.22.', '172.23.', 
-               '172.24.', '172.25.', '172.26.', '172.27.', '172.28.', 
-               '172.29.', '172.30.', '172.31.', 'localhost']):
-            return None
-        
-        # Проверяем, что домен содержит точку (базовая валидация)
-        if '.' not in hostname:
-            return None
-        
-        return hostname
-        
-    except Exception:
+        hostname = parsed.hostname
+        if hostname and not is_ip_address(hostname):
+            return hostname.lower()
+    except:
         return None
+    return None
 
-def extract_domains_from_pcap(pcap_file_path, output_file_path):
-    """
-    Извлекает HTTPS домены из PCAPNG файла и сохраняет их в текстовый файл
-    
-    Args:
-        pcap_file_path (str): Путь к PCAPNG файлу
-        output_file_path (str): Путь к выходному текстовому файлу
-    """
-    domains = set()  # Используем set для избежания дубликатов
-    
+def process_pcapng(file_path):
+    domains = set()
     try:
-        print(f"Открываем файл: {pcap_file_path}")
-        cap = pyshark.FileCapture(pcap_file_path)
-        
-        packet_count = 0
-        for packet in cap:
-            packet_count += 1
-            if packet_count % 1000 == 0:
-                print(f"Обработано пакетов: {packet_count}")
-            
-            try:
-                # Поиск HTTP трафика (но сохраняем только HTTPS)
-                if hasattr(packet, 'http'):
-                    http_layer = packet.http
-                    
-                    # Извлекаем Host и URI для построения полного URL
-                    host = getattr(http_layer, 'host', None)
-                    uri = getattr(http_layer, 'request_uri', None)
-                    
-                    if host:
-                        # Проверяем, что это HTTPS порт или принудительно делаем HTTPS
-                        protocol = 'https'
-                        if hasattr(packet, 'tcp') and packet.tcp.dstport == '443':
-                            protocol = 'https'
-                        elif hasattr(packet, 'tcp') and packet.tcp.dstport == '80':
-                            # Пропускаем HTTP трафик
-                            continue
-                        
-                        full_url = f"{protocol}://{host}"
-                        domain = extract_domain_from_url(full_url)
-                        if domain:
-                            domains.add(domain)
-                    
-                    # Также ищем Referer заголовки
-                    referer = getattr(http_layer, 'referer', None)
-                    if referer:
-                        domain = extract_domain_from_url(referer)
-                        if domain:
-                            domains.add(domain)
-                
-                # Поиск HTTPS/TLS трафика (SNI - Server Name Indication)
-                if hasattr(packet, 'tls'):
-                    try:
-                        tls_layer = packet.tls
-                        if hasattr(tls_layer, 'handshake_extensions_server_name'):
-                            server_name = tls_layer.handshake_extensions_server_name
-                            if server_name and not is_ip_address(server_name):
-                                # Убираем порт если есть
-                                if ':' in server_name:
-                                    server_name = server_name.split(':')[0]
-                                
-                                # Проверяем, что это не локальный адрес
-                                if not any(server_name.startswith(local) for local in 
-                                          ['127.', '192.168.', '10.', '172.16.', '172.17.', '172.18.', 
-                                           '172.19.', '172.20.', '172.21.', '172.22.', '172.23.', 
-                                           '172.24.', '172.25.', '172.26.', '172.27.', '172.28.', 
-                                           '172.29.', '172.30.', '172.31.', 'localhost']):
-                                    if '.' in server_name:  # Базовая валидация домена
-                                        domains.add(server_name)
-                    except:
-                        pass
-                
-                # Поиск DNS запросов (но сохраняем только как HTTPS)
-                if hasattr(packet, 'dns') and hasattr(packet.dns, 'qry_name'):
-                    domain_name = packet.dns.qry_name
-                    if domain_name and not domain_name.endswith('.') and not is_ip_address(domain_name):
-                        # Проверяем, что это не локальный адрес
-                        if not any(domain_name.startswith(local) for local in 
-                                  ['127.', '192.168.', '10.', '172.16.', '172.17.', '172.18.', 
-                                   '172.19.', '172.20.', '172.21.', '172.22.', '172.23.', 
-                                   '172.24.', '172.25.', '172.26.', '172.27.', '172.28.', 
-                                   '172.29.', '172.30.', '172.31.', 'localhost']):
-                            if '.' in domain_name:  # Базовая валидация домена
-                                domains.add(domain_name)
-                
-            except Exception as e:
-                # Пропускаем пакеты с ошибками
-                continue
-        
+        # Первый проход - подсчитываем общее количество пакетов с TLS SNI
+        print("    Подсчет TLS пакетов...", end="", flush=True)
+        cap = pyshark.FileCapture(file_path, display_filter='tls.handshake.extensions_server_name')
+        tls_packets = sum(1 for _ in cap)
         cap.close()
-        print(f"Всего обработано пакетов: {packet_count}")
+        
+        # Подсчитываем HTTP пакеты с Host заголовком
+        print(" и HTTP пакетов...", end="", flush=True)
+        cap = pyshark.FileCapture(file_path, display_filter='http.host')
+        http_packets = sum(1 for _ in cap)
+        cap.close()
+        
+        total_packets = tls_packets + http_packets
+        print(f" найдено {tls_packets} TLS + {http_packets} HTTP = {total_packets} пакетов")
+        
+        if total_packets == 0:
+            print("    Нет пакетов с доменами для обработки")
+            return domains
+        
+        processed = 0
+        
+        # Обрабатываем TLS пакеты
+        if tls_packets > 0:
+            cap = pyshark.FileCapture(file_path, display_filter='tls.handshake.extensions_server_name')
+            for pkt in cap:
+                try:
+                    if hasattr(pkt.tls, 'handshake_extensions_server_name'):
+                        domain = pkt.tls.handshake_extensions_server_name
+                        cleaned = extract_domain_from_url("https://" + domain)
+                        if cleaned:
+                            domains.add(cleaned)
+                except AttributeError:
+                    continue
+                
+                processed += 1
+                if processed % max(1, total_packets // 20) == 0:
+                    progress = (processed / total_packets) * 100
+                    print(f"\r    Обработано: {processed}/{total_packets} пакетов ({progress:.1f}%)", end="", flush=True)
+            cap.close()
+        
+        # Обрабатываем HTTP пакеты
+        if http_packets > 0:
+            cap = pyshark.FileCapture(file_path, display_filter='http.host')
+            for pkt in cap:
+                try:
+                    if hasattr(pkt.http, 'host'):
+                        domain = pkt.http.host
+                        cleaned = extract_domain_from_url("http://" + domain)
+                        if cleaned:
+                            domains.add(cleaned)
+                except AttributeError:
+                    continue
+                
+                processed += 1
+                if processed % max(1, total_packets // 20) == 0:
+                    progress = (processed / total_packets) * 100
+                    print(f"\r    Обработано: {processed}/{total_packets} пакетов ({progress:.1f}%)", end="", flush=True)
+            cap.close()
+        
+        # Финальный прогресс
+        print(f"\r    Обработано: {processed}/{total_packets} пакетов (100.0%)")
         
     except Exception as e:
-        print(f"Ошибка при чтении PCAP файла: {e}")
-        return False
-    
-    # Сортируем домены
-    filtered_domains = sorted(list(domains))
-    
-    # Создаем папку results если её нет
-    results_dir = 'results'
-    if not os.path.exists(results_dir):
-        os.makedirs(results_dir)
-        print(f"Создана папка: {results_dir}")
-    
-    # Сохраняем в файл
-    try:
-        with open(output_file_path, 'w', encoding='utf-8') as f:
-            f.write(f"HTTPS домены из файла: {pcap_file_path}\n")
-            f.write(f"Всего найдено уникальных доменов: {len(filtered_domains)}\n")
-            f.write("=" * 50 + "\n\n")
-            
-            for domain in filtered_domains:
-                f.write(domain + "\n")
-        
-        print(f"Найдено уникальных HTTPS доменов: {len(filtered_domains)}")
-        print(f"Результаты сохранены в файл: {output_file_path}")
-        return True
-        
-    except Exception as e:
-        print(f"Ошибка при сохранении файла: {e}")
-        return False
-
-def generate_output_filename(input_filename):
-    """
-    Генерирует имя выходного файла на основе входного
-    
-    Args:
-        input_filename (str): Имя входного файла
-    
-    Returns:
-        str: Путь к выходному файлу
-    """
-    # Убираем расширение из имени файла
-    base_name = os.path.splitext(os.path.basename(input_filename))[0]
-    
-    # Создаем имя выходного файла
-    output_filename = f"urls-{base_name}.txt"
-    
-    # Возвращаем полный путь в папке results
-    return os.path.join('results', output_filename)
+        print(f"\n    Ошибка при обработке {file_path}: {e}")
+    return domains
 
 def main():
-    """Основная функция"""
-    if len(sys.argv) != 2:
-        print("Использование: python script.py <путь_к_pcapng_файлу>")
-        print("Пример: python script.py capture.pcapng")
-        print("Выходной файл будет создан автоматически в папке results/")
-        sys.exit(1)
+    capture_dir = "capture"
+    results_dir = "results"
+    os.makedirs(results_dir, exist_ok=True)
+
+    # Получаем список всех .pcapng файлов
+    pcapng_files = [f for f in os.listdir(capture_dir) if f.endswith(".pcapng")]
+    total_files = len(pcapng_files)
     
-    pcap_file = sys.argv[1]
+    if total_files == 0:
+        print("Не найдено ни одного .pcapng файла в папке 'capture'")
+        return
     
-    # Проверяем существование входного файла
-    try:
-        with open(pcap_file, 'rb') as f:
-            pass
-    except FileNotFoundError:
-        print(f"Файл не найден: {pcap_file}")
-        sys.exit(1)
-    except Exception as e:
-        print(f"Ошибка при открытии файла: {e}")
-        sys.exit(1)
-    
-    # Генерируем имя выходного файла
-    output_file = generate_output_filename(pcap_file)
-    
-    print(f"Входной файл: {pcap_file}")
-    print(f"Выходной файл: {output_file}")
-    
-    # Извлекаем домены
-    success = extract_domains_from_pcap(pcap_file, output_file)
-    
-    if success:
-        print("Обработка завершена успешно!")
-    else:
-        print("Произошла ошибка при обработке файла.")
-        sys.exit(1)
+    print(f"Найдено {total_files} файлов для обработки")
+    print("-" * 50)
+
+    all_domains = set()
+    for i, filename in enumerate(pcapng_files, 1):
+        file_path = os.path.join(capture_dir, filename)
+        print(f"[{i}/{total_files}] Обработка: {filename}")
+        domains = process_pcapng(file_path)
+        
+        # Показываем новые домены из этого файла
+        new_domains = domains - all_domains
+        all_domains.update(domains)
+        
+        print(f"    Найдено доменов в файле: {len(domains)}")
+        print(f"    Новых доменов: {len(new_domains)}")
+        print(f"    Всего уникальных доменов: {len(all_domains)}")
+        print(f"    Прогресс файлов: {i/total_files*100:.1f}%")
+        
+        # Показываем несколько примеров новых доменов
+        if new_domains:
+            sample_domains = list(new_domains)[:5]
+            print(f"    Примеры новых: {', '.join(sample_domains)}")
+        
+        print("-" * 50)
+
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    result_path = os.path.join(results_dir, f"domains_{timestamp}.txt")
+
+    with open(result_path, "w") as f:
+        for domain in sorted(all_domains):
+            f.write(domain + "\n")
+
+    print("✓ ЗАВЕРШЕНО!")
+    print(f"Обработано файлов: {total_files}")
+    print(f"Найдено уникальных доменов: {len(all_domains)}")
+    print(f"Результат сохранён в: {result_path}")
 
 if __name__ == "__main__":
     main()
