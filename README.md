@@ -129,6 +129,7 @@ python main.py
 ```
 pcapng-extractor/
 ├── main.py                 # Основной скрипт для извлечения доменов
+├── DevTools.py             # Cкрипт для извлечения доменов из скопированнных в DevTools браузера
 ├── diagnostic.py           # Диагностический скрипт для анализа
 ├── capture/                # Папка с выгруженными из роуетра файлами
 │   └── capture-*.pcapng    # Файлы в формате .pcapng
@@ -171,6 +172,51 @@ rr5.sn-aigl6nek.googlevideo.com
 - ✅ Валидные доменные имена
 - ✅ HTTPS трафик
 - ✅ Внешние (не локальные) адреса
+
+
+# Извлечение адресов при копировании всех адресов из браузера
+## копирование адресов
+1. В Google Chrome перейти на заблокированный сайт (лучше это делать с включенным VPN на компьютере)
+2. Нажать F12, откроется панель DevTools
+3. Перейти на вкладку Сеть (Network)
+![image](https://github.com/user-attachments/assets/e0cb9b11-8532-4942-8d47-34edefd91b65)
+4. Обновить страницу
+5. Правой кнопкой мыши кликнуть на любой адрес и выбра "Копировать все URL"
+![image](https://github.com/user-attachments/assets/328d907f-7b50-445c-869c-c9d23e086276)
+6. Сохранить скопированные адреса в корне проекта в файле urls.txt
+7. Открыть в терминале папку проекта
+8. Запустить из папки скрипт `python3 DevTools.py`
+![image](https://github.com/user-attachments/assets/ea47d0a2-24c5-4f9e-bd48-e590044c8939)
+9. в папке проекта создасться файл с адресами
+![image](https://github.com/user-attachments/assets/20ae493a-90b5-4d3c-b2ec-b5626f48445f)
+
+В один файл urls.txt можно собрать адреса со всех нужных сайтов и разделить их названиями сайтов. Например в таком виде
+
+```txt
+#youtube
+accounts.youtube.com
+bollybeat.h5games.usercontent.goog
+fonts.googleapis.com
+fonts.gstatic.com
+googleads.g.doubleclick.net
+i.ytimg.com
+lh3.googleusercontent.com
+play.google.com
+rr3---sn-aigl6nsk.googlevideo.com
+static.doubleclick.net
+www.google.com
+www.gstatic.com
+www.youtube.com
+yt3.ggpht.com
+
+
+#x
+api.x.com
+twimg.com
+```
+В таком случае в итоговом файле адреса так же будут разделены на сайты и будет понятно, какой URL к какому сайту относится.
+
+
 
 
 ### Частые проблемы:
