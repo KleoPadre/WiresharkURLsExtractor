@@ -185,7 +185,7 @@ rr5.sn-aigl6nek.googlevideo.com
 6. Сохранить скопированные адреса в корне проекта в файле urls.txt
 7. Открыть в терминале папку проекта
 8. Запустить из папки скрипт `python3 DevTools.py`
-<img width="842" alt="SCR-20250611-knbf" src="https://github.com/user-attachments/assets/0229584e-2e67-48e4-b8d5-e7116b30e1de" />
+<img width="842" alt="SCR-20250611-knmm" src="https://github.com/user-attachments/assets/aeb5ed11-6263-4076-9ee0-7f873ab8a188" />
 9. в папке проекта создасться файл с адресами
 ![image](https://github.com/user-attachments/assets/20ae493a-90b5-4d3c-b2ec-b5626f48445f)
 
