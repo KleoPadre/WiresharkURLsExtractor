@@ -187,6 +187,7 @@ rr5.sn-aigl6nek.googlevideo.com
 8. Запустить из папки скрипт `python3 DevTools.py`
 <img width="842" alt="SCR-20250611-knmm" src="https://github.com/user-attachments/assets/aeb5ed11-6263-4076-9ee0-7f873ab8a188" />
 9. в папке проекта создасться файл с адресами
+
 ![image](https://github.com/user-attachments/assets/20ae493a-90b5-4d3c-b2ec-b5626f48445f)
 
 В один файл urls.txt можно собрать адреса со всех нужных сайтов и разделить их названиями сайтов. Например в таком виде
